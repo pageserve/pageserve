@@ -4,6 +4,7 @@ import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -128,7 +129,7 @@ class PageServeClient:
             raise_for_response(resp.status_code, body, dict(resp.headers))
         return resp.json()
 
-    def _post(self, path: str, json: dict = None, timeout: float = None) -> dict:
+    def _post(self, path: str, json: dict | None = None, timeout: float | None = None) -> dict:
         resp = self._http.post(path, json=json, timeout=timeout or self._timeout)
         if not resp.is_success:
             try:
@@ -164,7 +165,7 @@ class PageServeClient:
             limit:  Maximum number of results.
             offset: Pagination offset.
         """
-        params = {"limit": limit, "offset": offset}
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
         if status:
             params["status"] = status
         if tags:
@@ -422,7 +423,7 @@ class PageServeClient:
                 elif event.type == "done":
                     break
         """
-        body = {"question": question}
+        body: dict[str, Any] = {"question": question}
         if doc_ids:
             body["doc_ids"] = doc_ids
         elif doc_id:
@@ -454,7 +455,7 @@ class PageServeClient:
         self,
         name: str,
         key_type: str = "live",
-        scopes: list[str] = None,
+        scopes: list[str] | None = None,
         expires_at: str | None = None,
     ) -> CreatedApiKey:
         """Create a new API key.
@@ -500,7 +501,7 @@ class PageServeClient:
     def create_webhook(
         self,
         url: str,
-        events: list[str] = None,
+        events: list[str] | None = None,
         secret: str | None = None,
     ) -> Webhook:
         """Register a webhook endpoint.

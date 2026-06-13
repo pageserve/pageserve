@@ -56,7 +56,7 @@ class TimeoutError(PageServeError):
     """Request timed out — usually happens when querying large documents."""
 
 
-def raise_for_response(status_code: int, body: dict | str, headers: dict = None):
+def raise_for_response(status_code: int, body: dict | str, headers: dict | None = None):
     """Map an HTTP response to the appropriate exception and raise it.
 
     Args:

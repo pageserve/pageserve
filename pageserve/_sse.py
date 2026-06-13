@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 
@@ -30,7 +31,7 @@ def parse_sse_line(line: str) -> dict[str, Any] | None:
         return {"type": "raw", "content": payload}
 
 
-def iter_sse_lines(lines) -> "Iterator[dict]":  # noqa: F821
+def iter_sse_lines(lines) -> Iterator[dict]:
     """Filter and parse multiple SSE lines from a sync httpx response.
 
     Example:
@@ -44,7 +45,7 @@ def iter_sse_lines(lines) -> "Iterator[dict]":  # noqa: F821
             yield event
 
 
-async def aiter_sse_lines(lines) -> "AsyncIterator[dict]":  # noqa: F821
+async def aiter_sse_lines(lines) -> AsyncIterator[dict]:
     """Async version of iter_sse_lines for use with httpx.AsyncClient.
 
     Example:

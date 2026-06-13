@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 import httpx
 
@@ -85,7 +86,9 @@ class AsyncPageServeClient:
             raise_for_response(resp.status_code, body, dict(resp.headers))
         return resp.json()
 
-    async def _post(self, path: str, json: dict = None, timeout: float = None) -> dict:
+    async def _post(
+        self, path: str, json: dict | None = None, timeout: float | None = None
+    ) -> dict:
         resp = await self._http.post(path, json=json, timeout=timeout or self._timeout)
         if not resp.is_success:
             try:
@@ -111,7 +114,7 @@ class AsyncPageServeClient:
         limit: int = 100,
         offset: int = 0,
     ) -> list[Document]:
-        params = {"limit": limit, "offset": offset}
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
         if status:
             params["status"] = status
         if tags:
@@ -250,7 +253,7 @@ class AsyncPageServeClient:
         question: str = "",
         doc_ids: list[str] | None = None,
     ) -> AsyncIterator[SSEEvent]:
-        body = {"question": question}
+        body: dict[str, Any] = {"question": question}
         if doc_ids:
             body["doc_ids"] = doc_ids
         elif doc_id:
@@ -279,7 +282,7 @@ class AsyncPageServeClient:
         self,
         name: str,
         key_type: str = "live",
-        scopes: list[str] = None,
+        scopes: list[str] | None = None,
         expires_at: str | None = None,
     ) -> CreatedApiKey:
         data = await self._post(
@@ -307,7 +310,7 @@ class AsyncPageServeClient:
     async def create_webhook(
         self,
         url: str,
-        events: list[str] = None,
+        events: list[str] | None = None,
         secret: str | None = None,
     ) -> Webhook:
         data = await self._post(
