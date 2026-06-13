@@ -231,9 +231,9 @@ def health(ctx, as_json):
         click.echo(f"\nQueue: {h.queue.pending} pending")
 
     if h.system:
-        click.echo(
-            f"\nRAM: {h.system.ram_available_gb:.1f}GB available / {h.system.ram_total_gb:.1f}GB total"
-        )
+        avail = f"{h.system.ram_available_gb:.1f}"
+        total = f"{h.system.ram_total_gb:.1f}"
+        click.echo(f"\nRAM: {avail}GB available / {total}GB total")
         if h.system.max_file_mb:
             click.echo(f"Max file size: {h.system.max_file_mb}MB")
 
@@ -263,9 +263,8 @@ def keys_list(ctx, as_json):
         click.echo("Không có API key nào.")
         return
 
-    click.echo(
-        f"{'Tên':<25}  {'Public Key (prefix)':<25}  {'Type':<6}  {'Requests':>10}  {'Dùng lần cuối'}"
-    )
+    header = f"{'Tên':<25}  {'Public Key (prefix)':<25}  {'Type':<6}  {'Requests':>10}"
+    click.echo(header)
     click.echo("─" * 90)
     for k in keylist:
         last_used = str(k.last_used_at)[:10] if k.last_used_at else "Chưa dùng"
