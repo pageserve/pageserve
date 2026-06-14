@@ -134,14 +134,12 @@ Run the MCP server so Claude Desktop, Cursor, or any MCP-compatible agent can qu
 }
 ```
 
-The server exposes seven tools:
+The server exposes five tools:
 
 | Tool | Description |
 | --- | --- |
 | `list_documents` | See what documents are available |
-| `query_document` | Ask a question against one document |
-| `query_multiple_documents` | Cross-reference multiple documents |
-| `retrieve_document` | Return raw section content without synthesizing an answer |
+| `retrieve_document` | Return raw section content (with summaries) for the host to read — no second synthesis pass |
 | `get_page_content` | Read raw page text (no LLM, instant) |
 | `get_document_structure` | Browse the table of contents |
 | `get_service_health` | Check service status and queue |

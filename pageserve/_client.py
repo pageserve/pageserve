@@ -403,6 +403,11 @@ class PageServeClient:
         self,
         doc_id_or_ids: str | list[str],
         question: str,
+        *,
+        max_sections: int = 6,
+        max_pages_per_section: int = 4,
+        include_content: bool = True,
+        include_summary: bool = True,
     ) -> RetrieveResult:
         """Retrieve the raw content of the sections relevant to a question.
 
@@ -412,14 +417,27 @@ class PageServeClient:
         to feed the source material into your own LLM / prompt.
 
         Args:
-            doc_id_or_ids: A single doc_id, or a list of doc_ids.
-            question:      Natural-language question used to locate sections.
+            doc_id_or_ids:         A single doc_id, or a list of doc_ids.
+            question:              Natural-language question used to locate sections.
+            max_sections:          Max sections returned per document.
+            max_pages_per_section: Max page span fetched per section.
+            include_content:       If False, omit raw page text — returns only
+                                   section metadata + summary (cheap, few tokens);
+                                   fetch the pages you need with ``get_pages``.
+            include_summary:       If True, attach the node summary to each section.
 
         Returns:
             RetrieveResult with one entry per document, each containing the
-            relevant sections and their page-level content.
+            relevant sections (and their page-level content unless
+            ``include_content=False``).
         """
-        body: dict[str, Any] = {"question": question}
+        body: dict[str, Any] = {
+            "question": question,
+            "max_sections": max_sections,
+            "max_pages_per_section": max_pages_per_section,
+            "include_content": include_content,
+            "include_summary": include_summary,
+        }
         if isinstance(doc_id_or_ids, (list, tuple)):
             body["doc_ids"] = list(doc_id_or_ids)
         else:
@@ -570,3 +588,21 @@ class PageServeClient:
     def pdf_url(self, doc_id: str) -> str:
         """Return the URL for downloading or streaming the original PDF."""
         return f"{self._base}/files/{doc_id}.pdf"
+
+    def download_pdf(self, doc_id: str) -> bytes:
+        """Download the original PDF bytes (key-authenticated).
+
+        Hits ``GET /v1/documents/{doc_id}/pdf`` with ownership + read-scope
+        checks. To save it to disk:
+
+            with open("doc.pdf", "wb") as f:
+                f.write(client.download_pdf(doc_id))
+        """
+        resp = self._http.get(f"/v1/documents/{doc_id}/pdf", timeout=_UPLOAD_TIMEOUT)
+        if not resp.is_success:
+            try:
+                body = resp.json()
+            except Exception:
+                body = resp.text
+            raise_for_response(resp.status_code, body, dict(resp.headers))
+        return resp.content

@@ -122,3 +122,4 @@ See the [Sync Client Reference](sync-client.md) for parameter details.
 | `client.get_pages(id, pages)` | `await client.get_pages(id, pages)` |
 | `client.health()` | `await client.health()` |
 | `client.pdf_url(id)` | `client.pdf_url(id)` ← sync, no network |
+| `client.download_pdf(id)` | `await client.download_pdf(id)` |

@@ -252,12 +252,23 @@ class AsyncPageServeClient:
         self,
         doc_id_or_ids: str | list[str],
         question: str,
+        *,
+        max_sections: int = 6,
+        max_pages_per_section: int = 4,
+        include_content: bool = True,
+        include_summary: bool = True,
     ) -> RetrieveResult:
         """Retrieve raw section content for a question (no answer synthesis).
 
         See PageServeClient.retrieve for details.
         """
-        body: dict[str, Any] = {"question": question}
+        body: dict[str, Any] = {
+            "question": question,
+            "max_sections": max_sections,
+            "max_pages_per_section": max_pages_per_section,
+            "include_content": include_content,
+            "include_summary": include_summary,
+        }
         if isinstance(doc_id_or_ids, (list, tuple)):
             body["doc_ids"] = list(doc_id_or_ids)
         else:
@@ -354,3 +365,17 @@ class AsyncPageServeClient:
 
     def pdf_url(self, doc_id: str) -> str:
         return f"{self._base}/files/{doc_id}.pdf"
+
+    async def download_pdf(self, doc_id: str) -> bytes:
+        """Download the original PDF bytes (key-authenticated).
+
+        Hits ``GET /v1/documents/{doc_id}/pdf`` with ownership + read-scope checks.
+        """
+        resp = await self._http.get(f"/v1/documents/{doc_id}/pdf", timeout=_UPLOAD_TIMEOUT)
+        if not resp.is_success:
+            try:
+                body = resp.json()
+            except Exception:
+                body = resp.text
+            raise_for_response(resp.status_code, body, dict(resp.headers))
+        return resp.content

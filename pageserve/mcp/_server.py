@@ -50,15 +50,16 @@ def _create_server(
         port=port,
         instructions=(
             "PageIndex RAG service — truy xuất thông tin từ tài liệu nội bộ.\n\n"
+            "Bạn (MCP host) tự là LLM agent, nên primitive chính là retrieve "
+            "(lấy nội dung gốc) — KHÔNG có tool synthesize answer.\n\n"
             "Workflow:\n"
             "1. list_documents → xem tài liệu có sẵn, lấy doc_id\n"
-            "2. query_document → hỏi đáp 1 doc → answer + page refs\n"
-            "3. query_multiple_documents → cross-reference nhiều docs\n"
-            "4. retrieve_document → lấy nội dung gốc các section liên quan "
-            "(không synthesize answer, rẻ hơn query)\n"
-            "5. get_page_content → raw text trang cụ thể (instant, không LLM)\n"
-            "6. get_document_structure → mục lục phân cấp\n\n"
-            "Citation format trong answer: [[doc_id:page_number]]"
+            "2. retrieve_document → lấy nội dung gốc các section liên quan để tự "
+            "đưa vào ngữ cảnh; include_content=False để chỉ lấy metadata + summary "
+            "(rẻ token) rồi get_page_content đúng range cần\n"
+            "3. get_page_content → raw text trang cụ thể (instant, không LLM)\n"
+            "4. get_document_structure → mục lục phân cấp\n"
+            "5. get_service_health → kiểm tra service/queue"
         ),
     )
 
@@ -91,106 +92,39 @@ def _create_server(
             return json.dumps({"error": str(e)})
 
     @mcp.tool()
-    def query_document(doc_id: str, question: str) -> str:
-        """
-        Hỏi đáp với MỘT document bằng PageIndex reasoning-based RAG.
-        LLM tự navigate tree structure → fetch đúng trang → synthesize answer.
-
-        Với câu hỏi liên quan nhiều tài liệu, gọi tool này nhiều lần
-        (mỗi lần 1 doc_id), hoặc dùng query_multiple_documents.
-
-        Args:
-            doc_id:   Document ID (lấy từ list_documents)
-            question: Câu hỏi cụ thể liên quan đến document này
-
-        Returns:
-            JSON: {doc_id, doc_name, answer, page_refs, sources, raw_pages, elapsed_ms, cached}
-            - answer:    câu trả lời tổng hợp
-            - page_refs: danh sách số trang nguồn
-            - sources:   citation string, vd "Luật LĐ 2024 tr.22, 24"
-            - raw_pages: [{page, content}] — nội dung thô của trang
-        """
-        try:
-            result = client.query(doc_id, question)
-            return json.dumps(
-                {
-                    "doc_id": result.doc_id,
-                    "doc_name": result.doc_name,
-                    "answer": result.answer,
-                    "page_refs": result.page_refs,
-                    "sources": result.citation,
-                    "raw_pages": [
-                        {"page": p.page, "content": p.content[:500]} for p in result.raw_pages
-                    ],
-                    "elapsed_ms": result.elapsed_ms,
-                    "cached": result.cached,
-                },
-                ensure_ascii=False,
-            )
-        except PageServeError as e:
-            return json.dumps({"error": str(e)})
-
-    @mcp.tool()
-    def query_multiple_documents(doc_ids: list[str], question: str) -> str:
-        """
-        Hỏi đáp cross-reference nhiều documents cùng lúc.
-        Service tự query song song và tổng hợp kết quả.
-
-        Dùng khi câu hỏi cần thông tin từ nhiều tài liệu để so sánh
-        hoặc cross-reference (vd: "hợp đồng có đúng luật không?")
-
-        Args:
-            doc_ids:  List doc_id cần query (lấy từ list_documents)
-            question: Câu hỏi cross-reference
-
-        Returns:
-            JSON: {answer, sources: [{doc_id, doc_name, page_refs, raw_pages}], elapsed_ms}
-        """
-        try:
-            result = client.query_docs(doc_ids, question)
-            return json.dumps(
-                {
-                    "answer": result.answer,
-                    "sources": [
-                        {
-                            "doc_id": s.doc_id,
-                            "doc_name": s.doc_name,
-                            "page_refs": s.page_refs,
-                            "citation": s.citation,
-                            "raw_pages": [
-                                {"page": p.page, "content": p.content[:500]} for p in s.raw_pages
-                            ],
-                        }
-                        for s in result.sources
-                    ],
-                    "elapsed_ms": result.elapsed_ms,
-                    "cached": result.cached,
-                },
-                ensure_ascii=False,
-            )
-        except PageServeError as e:
-            return json.dumps({"error": str(e)})
-
-    @mcp.tool()
-    def retrieve_document(doc_id_or_ids: str | list[str], question: str) -> str:
+    def retrieve_document(
+        doc_id_or_ids: str | list[str],
+        question: str,
+        max_sections: int = 6,
+        include_content: bool = True,
+    ) -> str:
         """
         Lấy NỘI DUNG GỐC của các section liên quan đến câu hỏi — KHÔNG synthesize
-        answer. Rẻ hơn query_document (chỉ 1 LLM call/doc để điều hướng tree).
+        answer. Đây là primitive chính: bạn (host LLM) tự đọc nội dung và trả lời.
 
-        Dùng khi bạn muốn tự đọc/đưa nội dung thô vào prompt của mình thay vì
-        nhận một câu trả lời đã được tổng hợp sẵn.
+        Mỗi doc chỉ tốn 1 LLM call để điều hướng tree → rẻ và nhanh.
 
         Args:
-            doc_id_or_ids: Một doc_id (str) hoặc list doc_id
-            question:      Câu hỏi dùng để định vị section liên quan
+            doc_id_or_ids:  Một doc_id (str) hoặc list doc_id
+            question:       Câu hỏi dùng để định vị section liên quan
+            max_sections:   Số section tối đa trả về / doc (mặc định 6)
+            include_content: True → kèm text trang đầy đủ; False → chỉ metadata +
+                            summary (rẻ token), sau đó gọi get_page_content đúng
+                            range cần (chế độ hybrid)
 
         Returns:
             JSON: {doc_ids, question, elapsed_ms, cached,
-                   results: [{doc_id, sections: [{title, node_id,
-                              page_start, page_end, pages: [{page, content}]}]}]}
+                   results: [{doc_id, doc_name, doc_description,
+                              sections: [{title, node_id, page_start, page_end,
+                                          summary, pages: [{page, content}]|null}]}]}
         """
         try:
-            result = client.retrieve(doc_id_or_ids, question)
+            result = client.retrieve(
+                doc_id_or_ids,
+                question,
+                max_sections=max_sections,
+                include_content=include_content,
+            )
             return json.dumps(
                 {
                     "doc_ids": result.doc_ids,
@@ -201,15 +135,22 @@ def _create_server(
                         {
                             "doc_id": r.doc_id,
                             "doc_name": r.doc_name,
+                            "doc_description": r.doc_description,
                             "sections": [
                                 {
                                     "title": s.title,
                                     "node_id": s.node_id,
                                     "page_start": s.page_start,
                                     "page_end": s.page_end,
-                                    "pages": [
-                                        {"page": p.page, "content": p.content} for p in s.pages
-                                    ],
+                                    "summary": s.summary,
+                                    "pages": (
+                                        [
+                                            {"page": p.page, "content": p.content}
+                                            for p in s.pages
+                                        ]
+                                        if s.pages is not None
+                                        else None
+                                    ),
                                 }
                                 for s in r.sections
                             ],

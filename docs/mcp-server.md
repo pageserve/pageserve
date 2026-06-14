@@ -30,26 +30,25 @@ Add this to your `claude_desktop_config.json` or Cursor MCP config:
 }
 ```
 
-That's all. The agent will see seven tools under the `pageindex` namespace.
+That's all. The agent will see five tools under the `pageindex` namespace.
 
 ## Available tools
 
 | Tool | Signature | Returns |
 | --- | --- | --- |
 | `list_documents` | `()` | `[{doc_id, name, page_count, description, tags}]` |
-| `query_document` | `(doc_id, question)` | `{doc_id, doc_name, answer, page_refs, sources, raw_pages, elapsed_ms, cached}` |
-| `query_multiple_documents` | `(doc_ids, question)` | `{answer, sources: [{doc_id, doc_name, page_refs, citation, raw_pages}], elapsed_ms, cached}` |
-| `retrieve_document` | `(doc_id_or_ids, question)` | `{doc_ids, question, elapsed_ms, cached, results: [{doc_id, doc_name, sections: [{title, node_id, page_start, page_end, pages: [{page, content}]}]}]}` |
+| `retrieve_document` | `(doc_id_or_ids, question, max_sections=6, include_content=True)` | `{doc_ids, question, elapsed_ms, cached, results: [{doc_id, doc_name, doc_description, sections: [{title, node_id, page_start, page_end, summary, pages: [{page, content}] \| null}]}]}` |
 | `get_page_content` | `(doc_id, pages)` | `[{page, content}]` — instant, no LLM call |
 | `get_document_structure` | `(doc_id, depth=2)` | `[{title, node_id, start_index, end_index, page_range, summary, has_children, nodes}]` |
 | `get_service_health` | `()` | `{status, healthy, queue, system}` |
 
 **Notes**
 
+- The MCP host is itself an LLM agent, so the server exposes **`retrieve_document` as the primitive** — it returns raw section content for the host to read, with no second answer-synthesis pass. The old `query_document` / `query_multiple_documents` tools were removed in 0.1.2 (they ran PageServe's internal agent loop, roughly doubling backend token cost). Call `retrieve_document` instead and let the host compose the answer.
+- `retrieve_document` with `include_content=False` returns section metadata + `summary` only (cheap on tokens). Follow up with `get_page_content` on the exact `page_range` you need — the "hybrid" pattern.
 - `get_page_content` page spec: `"5"` (single), `"5-7"` (range), `"3,8,12"` (list).
 - `get_document_structure` depth: `1` = chapters only, `2` = chapters + sections (default), `0` = full tree.
-- `query_document` **synthesizes** an answer; `retrieve_document` returns the **raw section content** with no answer (cheaper — one LLM call per document just to navigate the tree). Use `retrieve_document` when the agent prefers to read source material itself.
-- A typical agent flow is `list_documents` → `query_document` / `query_multiple_documents` (or `retrieve_document`) → optionally `get_page_content` to surface full source text.
+- A typical agent flow is `list_documents` → `retrieve_document` → optionally `get_page_content` to surface full source text.
 
 ## SSE transport (remote / web agents)
 

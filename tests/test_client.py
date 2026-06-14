@@ -119,7 +119,14 @@ def test_retrieve_single_doc(client, mock_retrieve_response):
     import json as _json
 
     sent = _json.loads(route.calls.last.request.read())
-    assert sent == {"question": "điều khoản thử việc", "doc_id": "uuid-hop-dong"}
+    assert sent == {
+        "question": "điều khoản thử việc",
+        "doc_id": "uuid-hop-dong",
+        "max_sections": 6,
+        "max_pages_per_section": 4,
+        "include_content": True,
+        "include_summary": True,
+    }
     assert result.doc_ids == ["uuid-hop-dong"]
     assert result.cached is False
     assert len(result.results) == 1
@@ -142,7 +149,14 @@ def test_retrieve_multi_docs_sends_doc_ids(client, mock_retrieve_response):
     import json as _json
 
     body = _json.loads(route.calls.last.request.read())
-    assert body == {"question": "so sánh", "doc_ids": ["uuid-a", "uuid-b"]}
+    assert body == {
+        "question": "so sánh",
+        "doc_ids": ["uuid-a", "uuid-b"],
+        "max_sections": 6,
+        "max_pages_per_section": 4,
+        "include_content": True,
+        "include_summary": True,
+    }
 
 
 @respx.mock

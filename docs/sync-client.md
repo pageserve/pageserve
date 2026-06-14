@@ -193,11 +193,18 @@ for event in client.query_stream("uuid-xxx", "question"):
 
 ## Retrieve
 
-### `retrieve(doc_id_or_ids, question)`
+### `retrieve(doc_id_or_ids, question, *, max_sections=6, max_pages_per_section=4, include_content=True, include_summary=True)`
 
 Retrieve the **raw content** of the sections relevant to a question, without synthesizing an answer. Cheaper than `query()` (one LLM call per document just to navigate the tree) and ideal when you want to feed the source material into your own prompt.
 
 Accepts either a single `doc_id` (string) or a list of `doc_id`s.
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `max_sections` | `6` | Max sections returned per document |
+| `max_pages_per_section` | `4` | Max page span fetched per section |
+| `include_content` | `True` | When `False`, omit raw page text — return only section metadata + `summary` (cheap, few tokens) |
+| `include_summary` | `True` | Attach the node `summary` to each section |
 
 ```python
 result = client.retrieve("uuid-xxx", "What are the probation terms?")
@@ -207,9 +214,11 @@ print(result.cached)       # False
 
 for doc in result.results:
     print(doc.doc_name or doc.doc_id)
+    print(doc.doc_description)       # auto-generated document summary
     for section in doc.sections:
         print(f"  {section.title} (p.{section.page_range})")
-        print(section.text)     # all pages joined
+        print(section.summary)       # node summary
+        print(section.text)          # all pages joined
 
 # Convenience accessors that flatten across documents:
 result.sections   # list[Section] from every document
@@ -220,6 +229,16 @@ Multiple documents:
 
 ```python
 result = client.retrieve(["uuid-contract", "uuid-law"], "probation pay rules")
+```
+
+**Hybrid mode** — fetch only section metadata + summaries (cheap on tokens), then
+pull the exact pages you need with `get_pages()`:
+
+```python
+result = client.retrieve("uuid-xxx", "probation pay", include_content=False)
+for section in result.sections:
+    print(section.title, section.summary)   # section.pages is None here
+    pages = client.get_pages("uuid-xxx", section.page_range)  # fetch on demand
 ```
 
 See [`RetrieveResult` / `Section`](models.md) for the full model.
@@ -262,11 +281,21 @@ print(h.is_healthy)      # True / False
 print(h.queue.pending)   # documents waiting to be indexed
 ```
 
-## PDF URL
+## PDF
 
 ```python
 url = client.pdf_url("uuid-xxx")
 # https://pageindex.company.com/files/uuid-xxx.pdf
+```
+
+### `download_pdf(doc_id)`
+
+Download the original PDF bytes over the key-authenticated route
+`GET /v1/documents/{doc_id}/pdf` (ownership + read-scope checked):
+
+```python
+with open("doc.pdf", "wb") as f:
+    f.write(client.download_pdf("uuid-xxx"))
 ```
 
 ---

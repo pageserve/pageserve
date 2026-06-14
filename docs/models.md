@@ -127,10 +127,11 @@ One document's contribution to a multi-document query result.
 
 ```python
 class QuerySource(BaseModel):
-    doc_id:    str
-    doc_name:  str | None = ""
-    page_refs: list[int]  = []        # 1-based page numbers
-    raw_pages: list[Page] = []
+    doc_id:          str
+    doc_name:        str | None = ""
+    doc_description: str | None = None   # auto-generated document summary
+    page_refs:       list[int]  = []     # 1-based page numbers
+    raw_pages:       list[Page] = []
 ```
 
 **Properties**
@@ -175,7 +176,8 @@ class Section(BaseModel):
     node_id:    str | None = None
     page_start: int | None = None
     page_end:   int | None = None
-    pages:      list[Page] = []
+    summary:    str | None = None         # node summary (when include_summary=True)
+    pages:      list[Page] | None = None  # None when retrieve(include_content=False)
 ```
 
 **Properties**
@@ -183,7 +185,11 @@ class Section(BaseModel):
 | Property | Returns | Notes |
 | --- | --- | --- |
 | `page_range` | `str` | `"5"` for a single page, `"5–6"` for a range |
-| `text` | `str` | The content of all `pages` joined with blank lines |
+| `text` | `str` | The content of all `pages` joined with blank lines (empty string when `pages` is `None`) |
+
+> `pages` is `None` when you call `retrieve(..., include_content=False)` — the
+> server returns section metadata + `summary` only. Use `get_pages()` to fetch the
+> page text on demand.
 
 ## RetrieveDocResult
 
@@ -191,9 +197,10 @@ Per-document grouping of sections inside a `RetrieveResult`.
 
 ```python
 class RetrieveDocResult(BaseModel):
-    doc_id:   str
-    doc_name: str | None = None
-    sections: list[Section] = []
+    doc_id:          str
+    doc_name:        str | None = None
+    doc_description: str | None = None   # auto-generated document summary
+    sections:        list[Section] = []
 ```
 
 ## RetrieveResult

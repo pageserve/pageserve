@@ -83,6 +83,7 @@ class Page(BaseModel):
 class QuerySource(BaseModel):
     doc_id: str
     doc_name: str | None = ""
+    doc_description: str | None = None
     page_refs: list[int] = Field(default_factory=list)
     raw_pages: list[Page] = Field(default_factory=list)
 
@@ -126,7 +127,9 @@ class Section(BaseModel):
     node_id: str | None = None
     page_start: int | None = None
     page_end: int | None = None
-    pages: list[Page] = Field(default_factory=list)
+    summary: str | None = None  # node summary (khi include_summary=True)
+    # Optional: server bỏ `pages` khi retrieve(..., include_content=False)
+    pages: list[Page] | None = None
 
     @property
     def page_range(self) -> str:
@@ -139,7 +142,7 @@ class Section(BaseModel):
     @property
     def text(self) -> str:
         """Nội dung thô của toàn bộ section, nối các trang."""
-        return "\n\n".join(p.content for p in self.pages)
+        return "\n\n".join(p.content for p in (self.pages or []))
 
 
 class RetrieveDocResult(BaseModel):
@@ -147,6 +150,7 @@ class RetrieveDocResult(BaseModel):
 
     doc_id: str
     doc_name: str | None = None
+    doc_description: str | None = None
     sections: list[Section] = Field(default_factory=list)
 
 
