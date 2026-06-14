@@ -1,8 +1,8 @@
 # MCP Server
 
-The MCP server lets Claude, Cursor, and other MCP-compatible agents query your PageIndex documents directly — without you having to write any prompt glue.
+The MCP server lets Claude Desktop, Cursor, and other [Model Context Protocol](https://modelcontextprotocol.io/) agents query your PageIndex documents directly — no prompt glue required.
 
-Keys are stored in environment variables on the local machine and never appear in tool arguments or the model's context window.
+Credentials live in environment variables on the local machine and never appear in tool arguments or the model's context window.
 
 ## Installation
 
@@ -30,69 +30,37 @@ Add this to your `claude_desktop_config.json` or Cursor MCP config:
 }
 ```
 
-That's all. Claude will see five tools under the `pageindex` namespace.
+That's all. The agent will see seven tools under the `pageindex` namespace.
 
 ## Available tools
 
-### `list_documents`
+| Tool | Signature | Returns |
+| --- | --- | --- |
+| `list_documents` | `()` | `[{doc_id, name, page_count, description, tags}]` |
+| `query_document` | `(doc_id, question)` | `{doc_id, doc_name, answer, page_refs, sources, raw_pages, elapsed_ms, cached}` |
+| `query_multiple_documents` | `(doc_ids, question)` | `{answer, sources: [{doc_id, doc_name, page_refs, citation, raw_pages}], elapsed_ms, cached}` |
+| `retrieve_document` | `(doc_id_or_ids, question)` | `{doc_ids, question, elapsed_ms, cached, results: [{doc_id, doc_name, sections: [{title, node_id, page_start, page_end, pages: [{page, content}]}]}]}` |
+| `get_page_content` | `(doc_id, pages)` | `[{page, content}]` — instant, no LLM call |
+| `get_document_structure` | `(doc_id, depth=2)` | `[{title, node_id, start_index, end_index, page_range, summary, has_children, nodes}]` |
+| `get_service_health` | `()` | `{status, healthy, queue, system}` |
 
-List all indexed documents. Call this first to discover what's available and get doc IDs.
+**Notes**
 
-**Returns:** `[{doc_id, name, page_count, description, tags}]`
+- `get_page_content` page spec: `"5"` (single), `"5-7"` (range), `"3,8,12"` (list).
+- `get_document_structure` depth: `1` = chapters only, `2` = chapters + sections (default), `0` = full tree.
+- `query_document` **synthesizes** an answer; `retrieve_document` returns the **raw section content** with no answer (cheaper — one LLM call per document just to navigate the tree). Use `retrieve_document` when the agent prefers to read source material itself.
+- A typical agent flow is `list_documents` → `query_document` / `query_multiple_documents` (or `retrieve_document`) → optionally `get_page_content` to surface full source text.
 
-### `query_document(doc_id, question)`
-
-Ask a question against one document. The LLM navigates the structure and synthesizes an answer.
-
-**Returns:** `{answer, page_refs, sources (citation string), raw_pages, elapsed_ms, cached}`
-
-### `query_multiple_documents(doc_ids, question)`
-
-Cross-reference multiple documents in one call. Good for compliance checks ("does this contract match the law?").
-
-**Returns:** `{answer, sources: [{doc_id, doc_name, page_refs, citation, raw_pages}]}`
-
-### `get_page_content(doc_id, pages)`
-
-Get raw text for specific pages. Instant, no LLM involved. Use after a `query_document` call to read the full source pages.
-
-**pages format:** `"5"` (single), `"5-7"` (range), `"3,8,12"` (multiple)
-
-**Returns:** `[{page, content}]`
-
-### `get_document_structure(doc_id, depth=2)`
-
-Get the hierarchical table of contents. Use to understand what sections a document contains before asking questions.
-
-**depth:** 1 = chapters only, 2 = chapters + sections (default), 0 = full tree
-
-**Returns:** `[{title, node_id, start_index, end_index, page_range, summary, has_children, nodes}]`
-
-### `get_service_health`
-
-Check if the service is up and how much capacity remains.
-
-**Returns:** `{status, healthy, queue: {pending, workers}, system: {ram_available_gb, max_file_mb}}`
-
-## Typical agent workflow
-
-Claude will usually:
-1. Call `list_documents` to see what's available
-2. Call `query_document` or `query_multiple_documents` with the user's question
-3. Optionally call `get_page_content` to show the full source text
-
-## SSE transport (for web agents)
-
-Start the MCP server with SSE transport for browser-based or remote agents:
+## SSE transport (remote / web agents)
 
 ```bash
 PAGESERVE_URL=https://pageindex.company.com \
 PAGESERVE_PUBLIC_KEY=<your-public-key> \
 PAGESERVE_SECRET_KEY=<your-secret-key> \
-pageserve mcp --transport sse --port 3000
+pageserve mcp --transport sse --host 0.0.0.0 --port 3000
 ```
 
-Connect with:
+`--host` defaults to `127.0.0.1` and `--port` to `3000`. Connect with:
 
 ```json
 {
@@ -105,7 +73,11 @@ Connect with:
 }
 ```
 
-## Embed in Python
+`--transport streamable-http` is also supported (served at `/mcp`).
+
+## Embedding in Python
+
+The host and port must be set **when the server is created** — `FastMCP.run()` does not accept a `port` argument:
 
 ```python
 import os
@@ -115,42 +87,47 @@ mcp = create_mcp_server(
     base_url   = os.environ["PAGESERVE_URL"],
     public_key = os.environ["PAGESERVE_PUBLIC_KEY"],
     secret_key = os.environ["PAGESERVE_SECRET_KEY"],
+    host       = "127.0.0.1",   # used by sse / streamable-http only
+    port       = 3000,
 )
 
-mcp.run()                                     # stdio (default)
-mcp.run(transport="sse", port=3000)           # SSE
-mcp.run(transport="streamable-http", port=3000)
+mcp.run()                              # stdio (default)
+mcp.run(transport="sse")               # SSE on the host:port set above
+mcp.run(transport="streamable-http")   # Streamable HTTP
 ```
 
-## Anthropic Messages API
+## Using it from the Claude API
+
+The Anthropic Messages API can connect to **remote** MCP servers via the `mcp_servers` parameter — those entries must be `type: "url"` pointing at an HTTP/SSE endpoint, so first run the server with `--transport sse` (or `streamable-http`) and expose it at a reachable URL:
 
 ```python
-import os
 import anthropic
 
 client = anthropic.Anthropic()
 
-response = client.messages.create(
-    model      = "claude-sonnet-4-6",
-    max_tokens = 4096,
-    mcp_servers = [{
-        "type":    "stdio",
-        "command": "pageserve",
-        "args":    ["mcp"],
-        "env": {
-            "PAGESERVE_URL":        "https://pageindex.company.com",
-            "PAGESERVE_PUBLIC_KEY": os.environ["PAGESERVE_PUBLIC_KEY"],
-            "PAGESERVE_SECRET_KEY": os.environ["PAGESERVE_SECRET_KEY"],
-        },
+response = client.beta.messages.create(
+    model="claude-opus-4-8",
+    max_tokens=4096,
+    mcp_servers=[{
+        "type": "url",
+        "name": "pageindex",
+        "url":  "https://your-host.example.com/sse",
     }],
-    messages = [{
-        "role":    "user",
+    betas=["mcp-client-2025-04-04"],
+    messages=[{
+        "role": "user",
         "content": "Does our employment contract comply with labor law on probation pay?",
     }],
 )
-print(response.content[0].text)
+print(response.content[-1].text)
 ```
+
+> The Messages API connector does **not** launch local `stdio` servers — it only connects to remote URLs. For a local server (the `pageserve mcp` stdio default), drive it through an MCP-capable client such as Claude Desktop, Cursor, or the Claude Agent SDK, or use the Anthropic SDK's MCP tool-conversion helpers (`anthropic.lib.tools.mcp`) to bridge a local stdio session into a tool runner.
 
 ## Security note
 
-**stdio > HTTP for local use.** With stdio, the keys live in the process environment and never travel over the network. With SSE/HTTP, the keys must be present in the server process but requests still go over localhost — which is fine for local dev but worth thinking about in shared environments.
+**Prefer stdio for local use.** With stdio, the keys live in the local process environment and never travel over the network. With SSE / Streamable HTTP, the keys must still be present in the server process, and requests reach it over the network — fine for local development behind localhost, but put it behind TLS and authentication before exposing it beyond your machine.
+
+---
+
+**See also:** [CLI Reference](cli.md) · [Authentication](authentication.md) · [Back to docs index](../README.md#documentation)

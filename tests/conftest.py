@@ -80,6 +80,35 @@ def mock_query_response():
 
 
 @pytest.fixture
+def mock_retrieve_response():
+    """POST /v1/retrieve response — raw section content, no synthesized answer."""
+    return {
+        "doc_ids": ["uuid-hop-dong"],
+        "question": "điều khoản thử việc",
+        "elapsed_ms": 820,
+        "cached": False,
+        "results": [
+            {
+                "doc_id": "uuid-hop-dong",
+                "doc_name": "hop-dong-lao-dong.pdf",
+                "sections": [
+                    {
+                        "title": "Thử việc",
+                        "node_id": "0006",
+                        "page_start": 5,
+                        "page_end": 6,
+                        "pages": [
+                            {"page": 5, "content": "Điều 4. Thời gian thử việc: 03 tháng..."},
+                            {"page": 6, "content": "Lương thử việc: 80% lương chính thức..."},
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+
+@pytest.fixture
 def mock_multi_query_response():
     """Multi-doc query response."""
     return {

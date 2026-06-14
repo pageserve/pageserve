@@ -1,18 +1,22 @@
 # CLI Reference
 
-The `pageserve` CLI gives you access to the most common operations without writing any Python.
+The `pageserve` command exposes the most common operations without writing any Python. Install it with:
 
-## Global options
+```bash
+pip install "pageserve[cli]"
+```
 
-Every command accepts these options (or the equivalent environment variable):
+## Configuration
 
-| Option | Env var | Default |
-|---|---|---|
-| `--base-url` | `PAGESERVE_URL` | — |
-| `--public-key` | `PAGESERVE_PUBLIC_KEY` | — |
-| `--secret-key` | `PAGESERVE_SECRET_KEY` | — |
+Every command reads credentials from environment variables, or from the equivalent global option:
 
-Recommended: put the env vars in your shell profile or a `.env` file rather than passing them on every command.
+| Option | Environment variable |
+| --- | --- |
+| `--base-url` | `PAGESERVE_URL` |
+| `--public-key` | `PAGESERVE_PUBLIC_KEY` |
+| `--secret-key` | `PAGESERVE_SECRET_KEY` |
+
+Export them once in your shell profile rather than passing them on every invocation:
 
 ```bash
 export PAGESERVE_URL=https://pageindex.company.com
@@ -20,153 +24,116 @@ export PAGESERVE_PUBLIC_KEY=<your-public-key>
 export PAGESERVE_SECRET_KEY=<your-secret-key>
 ```
 
-## `pageserve mcp`
+Run `pageserve --version` to print the installed version, or `pageserve --help` for the full command list.
 
-Start the MCP server (stdio by default, for Claude Desktop and Cursor).
-
-```bash
-pageserve mcp
-pageserve mcp --transport sse --port 3000
-pageserve mcp --transport streamable-http --port 3000
-```
-
-See [MCP Server](mcp-server.md) for the full setup guide.
+---
 
 ## `pageserve list`
 
-List all documents in the index.
+List documents in the project.
 
 ```bash
-pageserve list
-pageserve list --status completed
-pageserve list --tag legal --tag contracts
-pageserve list --limit 50
+pageserve list                       # completed documents (default)
+pageserve list --status all          # every status
+pageserve list --status indexing     # filter by status
+pageserve list --json                # machine-readable output
 ```
 
-Output:
-
-```
-doc_id                               name                         status      pages
-────────────────────────────────────────────────────────────────────────────────────
-3f2a1b0c-...                         employment-contract.pdf      completed   24
-7e8d9c0b-...                         labor-law-2024.pdf           completed   88
-```
+`--status` accepts `completed` (default), `pending`, `indexing`, `failed`, or `all`. Default output is a table with a status icon (✅ / ⏳ / ⏸ / ❌) per document.
 
 ## `pageserve query`
 
-Ask a question against one or more documents.
+Ask a question against a single document. `DOC_ID` and `QUESTION` are positional arguments.
 
 ```bash
-# Single document
-pageserve query --doc-id 3f2a1b0c-... "What are the probation terms?"
-
-# Multiple documents
-pageserve query \
-  --doc-id 3f2a1b0c-... \
-  --doc-id 7e8d9c0b-... \
-  "Does the contract comply with labor law on probation pay?"
-
-# Stream tokens as they arrive
-pageserve query --doc-id 3f2a1b0c-... --stream "Summarize the termination clause"
+pageserve query <doc_id> "What are the probation terms?"
+pageserve query <doc_id> "Summarize the termination clause" --stream
+pageserve query <doc_id> "What are the probation terms?" --json
 ```
 
-Output (non-streaming):
+| Flag | Effect |
+| --- | --- |
+| `--stream` | Stream tokens as they arrive, with live tool-call and source indicators |
+| `--json` | Print the full `QueryResult` as JSON |
 
-```
-Answer:
-The probation period is 60 days, with pay at 85% of base salary...
+Without flags, the answer is printed to stdout and the citation + elapsed time to stderr, so you can pipe just the answer:
 
-Sources:
-  employment-contract.pdf p.5, 6
+```bash
+pageserve query <doc_id> "..." > answer.txt
 ```
+
+## `pageserve retrieve`
+
+Retrieve the **raw content** of the sections relevant to a question — no answer is synthesized. Cheaper than `query` (one LLM call per document just to navigate the tree). `DOC_ID` and `QUESTION` are positional arguments.
+
+```bash
+pageserve retrieve <doc_id> "What are the probation terms?"
+pageserve retrieve <doc_id> "..." --json
+pageserve retrieve _ "Compare the two contracts" --docs <doc_a>,<doc_b>
+```
+
+| Flag | Effect |
+| --- | --- |
+| `--docs` | Retrieve across multiple documents (comma-separated). When set, the positional `DOC_ID` is ignored — pass `_` as a placeholder. |
+| `--json` | Print the full `RetrieveResult` as JSON |
+
+Without flags, each matching section is printed with its title, page range, and page text.
 
 ## `pageserve upload`
 
-Upload a PDF to PageIndex and optionally wait for indexing to complete.
+Upload a PDF and start indexing.
 
 ```bash
-# Upload and return immediately
-pageserve upload ./report.pdf
-
-# Upload and wait until indexing is done (up to 10 min)
-pageserve upload ./report.pdf --wait
-
-# Custom wait timeout
-pageserve upload ./report.pdf --wait --max-wait 300
+pageserve upload ./report.pdf            # upload and return immediately
+pageserve upload ./report.pdf --watch    # upload + live progress bar
+pageserve upload ./report.pdf --wait     # upload + wait until indexing completes
 ```
 
-Output:
-
-```
-Uploaded: 3f2a1b0c-4d5e-6f7a-8b9c-0d1e2f3a4b5c
-Status:   pending
-
-Waiting for indexing...
-[████████████████████████████░░] 92%
-Status:   completed
-```
+`--watch` and `--wait` both stream indexing progress (a `[████░░] 72%` bar) until the document reaches `completed` or `failed`.
 
 ## `pageserve health`
 
-Check whether the service is up and how much capacity is available.
+Check service status, queue depth, and capacity.
 
 ```bash
 pageserve health
-```
-
-Output:
-
-```
-Status:  ok
-Queue:   2 pending, 4 workers
-Storage: 14.2 GB available
-RAM:     3.8 GB free
+pageserve health --json
 ```
 
 ## `pageserve keys`
 
 Manage API keys.
 
-### `pageserve keys list`
-
 ```bash
+# List keys (name, public-key prefix, type, request count, last used)
 pageserve keys list
+pageserve keys list --json
+
+# Create a key — the secret is printed once and cannot be retrieved again
+pageserve keys create "Production"
+pageserve keys create "Read-only CI" --type test --scopes read
+pageserve keys create "Temp" --expires 2027-01-01T00:00:00Z
+
+# Revoke a key (prompts for confirmation unless --yes is passed)
+pageserve keys revoke <key_id>
+pageserve keys revoke <key_id> --yes
 ```
 
-Output:
+`keys create` options: `--type` (`live` | `test`, default `live`), `--scopes` (comma-separated, default `read,write`), `--expires` (ISO 8601 datetime).
 
-```
-id          name          type   scopes         requests
-──────────────────────────────────────────────────────────
-ak_1a2b3c   My App        live   read, write    1,204
-ak_9x8y7z   CI Runner     live   read           88
-```
+## `pageserve mcp`
 
-### `pageserve keys create`
+Run the [MCP server](mcp-server.md).
 
 ```bash
-pageserve keys create "My App" --type live --scope read --scope write
+pageserve mcp                                       # stdio (default) — Claude Desktop / Cursor
+pageserve mcp --transport sse --port 3000           # SSE
+pageserve mcp --transport streamable-http --host 0.0.0.0 --port 3000
+pageserve mcp --name my-docs                         # custom server name
 ```
 
-Output:
+`--transport` accepts `stdio` (default), `sse`, or `streamable-http`. `--host` (default `127.0.0.1`) and `--port` (default `3000`) apply only to the `sse` / `streamable-http` transports. See the [MCP Server guide](mcp-server.md) for client setup.
 
-```
-Public key: <your-public-key>
-Secret key: <your-secret-key>   ← save this now, it won't be shown again
-```
+---
 
-### `pageserve keys revoke`
-
-```bash
-pageserve keys revoke ak_1a2b3c
-```
-
-## Exit codes
-
-| Code | Meaning |
-|---|---|
-| 0 | Success |
-| 1 | Auth error (invalid or expired key) |
-| 2 | Not found |
-| 3 | Service error (5xx) |
-| 4 | Timeout |
+**See also:** [MCP Server](mcp-server.md) · [Authentication](authentication.md) · [Back to docs index](../README.md#documentation)

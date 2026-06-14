@@ -131,3 +131,9 @@ line   = 'data: {"type": "token", "content": "Hello"}'
 result = parse_sse_line(line)
 # {"type": "token", "content": "Hello"}
 ```
+
+> `parse_sse_line` lives in the internal `pageserve._sse` module — it is not part of the public API and may change between releases.
+
+---
+
+**See also:** [Sync Client Reference](sync-client.md) · [Async Client Reference](async-client.md) · [Data Models](models.md) · [Back to docs index](../README.md#documentation)

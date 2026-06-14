@@ -14,10 +14,16 @@ def _create_server(
     public_key: str | None = None,
     secret_key: str | None = None,
     name: str = "pageindex",
+    host: str = "127.0.0.1",
+    port: int = 3000,
 ) -> FastMCP:
     """
     Tạo FastMCP server với PageIndex tools.
     Đọc credentials từ args hoặc env vars.
+
+    host/port chỉ dùng cho transport `sse` và `streamable-http`; với `stdio`
+    chúng bị bỏ qua. FastMCP yêu cầu host/port được set lúc khởi tạo
+    (run() KHÔNG nhận tham số port).
     """
     _url = base_url or os.environ.get("PAGESERVE_URL", "")
     _pub = public_key or os.environ.get("PAGESERVE_PUBLIC_KEY", "")
@@ -40,14 +46,18 @@ def _create_server(
 
     mcp = FastMCP(
         name=name,
+        host=host,
+        port=port,
         instructions=(
             "PageIndex RAG service — truy xuất thông tin từ tài liệu nội bộ.\n\n"
             "Workflow:\n"
             "1. list_documents → xem tài liệu có sẵn, lấy doc_id\n"
             "2. query_document → hỏi đáp 1 doc → answer + page refs\n"
             "3. query_multiple_documents → cross-reference nhiều docs\n"
-            "4. get_page_content → raw text trang cụ thể (instant, không LLM)\n"
-            "5. get_document_structure → mục lục phân cấp\n\n"
+            "4. retrieve_document → lấy nội dung gốc các section liên quan "
+            "(không synthesize answer, rẻ hơn query)\n"
+            "5. get_page_content → raw text trang cụ thể (instant, không LLM)\n"
+            "6. get_document_structure → mục lục phân cấp\n\n"
             "Citation format trong answer: [[doc_id:page_number]]"
         ),
     )
@@ -155,6 +165,57 @@ def _create_server(
                     ],
                     "elapsed_ms": result.elapsed_ms,
                     "cached": result.cached,
+                },
+                ensure_ascii=False,
+            )
+        except PageServeError as e:
+            return json.dumps({"error": str(e)})
+
+    @mcp.tool()
+    def retrieve_document(doc_id_or_ids: str | list[str], question: str) -> str:
+        """
+        Lấy NỘI DUNG GỐC của các section liên quan đến câu hỏi — KHÔNG synthesize
+        answer. Rẻ hơn query_document (chỉ 1 LLM call/doc để điều hướng tree).
+
+        Dùng khi bạn muốn tự đọc/đưa nội dung thô vào prompt của mình thay vì
+        nhận một câu trả lời đã được tổng hợp sẵn.
+
+        Args:
+            doc_id_or_ids: Một doc_id (str) hoặc list doc_id
+            question:      Câu hỏi dùng để định vị section liên quan
+
+        Returns:
+            JSON: {doc_ids, question, elapsed_ms, cached,
+                   results: [{doc_id, sections: [{title, node_id,
+                              page_start, page_end, pages: [{page, content}]}]}]}
+        """
+        try:
+            result = client.retrieve(doc_id_or_ids, question)
+            return json.dumps(
+                {
+                    "doc_ids": result.doc_ids,
+                    "question": result.question,
+                    "elapsed_ms": result.elapsed_ms,
+                    "cached": result.cached,
+                    "results": [
+                        {
+                            "doc_id": r.doc_id,
+                            "doc_name": r.doc_name,
+                            "sections": [
+                                {
+                                    "title": s.title,
+                                    "node_id": s.node_id,
+                                    "page_start": s.page_start,
+                                    "page_end": s.page_end,
+                                    "pages": [
+                                        {"page": p.page, "content": p.content} for p in s.pages
+                                    ],
+                                }
+                                for s in r.sections
+                            ],
+                        }
+                        for r in result.results
+                    ],
                 },
                 ensure_ascii=False,
             )

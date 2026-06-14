@@ -75,3 +75,7 @@ with PageServeClient(base_url, pk, sk) as client:
 - [Async Client Reference](async-client.md) — for FastAPI and async code
 - [Streaming](streaming.md) — stream answers token by token
 - [MCP Server](mcp-server.md) — connect Claude or other agents to your documents
+
+---
+
+**See also:** [CLI Reference](cli.md) · [Error Handling](error-handling.md) · [Back to docs index](../README.md#documentation)

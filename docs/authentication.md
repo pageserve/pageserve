@@ -94,3 +94,7 @@ try:
 except AuthError as e:
     print(f"Auth failed: {e}")
 ```
+
+---
+
+**See also:** [Getting Started](getting-started.md) · [Error Handling](error-handling.md) · [Back to docs index](../README.md#documentation)

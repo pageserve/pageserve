@@ -22,6 +22,9 @@ from pageserve._models import (
     Page,
     QueryResult,
     QuerySource,
+    RetrieveDocResult,
+    RetrieveResult,
+    Section,
     SSEEvent,
     Stats,
     StructureNode,
@@ -30,7 +33,7 @@ from pageserve._models import (
     WebhookTestResult,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__ = "pageserve"
 __license__ = "Apache-2.0"
 
@@ -46,6 +49,9 @@ __all__ = [
     "Page",
     "QueryResult",
     "QuerySource",
+    "RetrieveResult",
+    "RetrieveDocResult",
+    "Section",
     "SSEEvent",
     "IndexProgress",
     "ApiKey",

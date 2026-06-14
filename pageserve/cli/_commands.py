@@ -49,10 +49,11 @@ def _make_client(ctx):
     type=click.Choice(["stdio", "sse", "streamable-http"]),
     help="MCP transport protocol",
 )
+@click.option("--host", default="127.0.0.1", help="Host cho SSE/streamable-http transport")
 @click.option("--port", default=3000, help="Port cho SSE/streamable-http transport")
 @click.option("--name", default="pageindex", help="Tên MCP server")
 @click.pass_context
-def mcp(ctx, transport, port, name):
+def mcp(ctx, transport, host, port, name):
     """Chạy MCP server expose PageIndex tools cho agent frameworks."""
     from pageserve.mcp import create_mcp_server
 
@@ -60,21 +61,25 @@ def mcp(ctx, transport, port, name):
     public_key = ctx.obj.get("public_key") or os.environ.get("PAGESERVE_PUBLIC_KEY", "")
     secret_key = ctx.obj.get("secret_key") or os.environ.get("PAGESERVE_SECRET_KEY", "")
 
+    # host/port phải set lúc khởi tạo FastMCP — run() không nhận tham số port.
     server = create_mcp_server(
         base_url=base_url,
         public_key=public_key,
         secret_key=secret_key,
         name=name,
+        host=host,
+        port=port,
     )
 
-    click.echo(f"PageServe MCP [{transport}] → {base_url}", err=True)
-
     if transport == "stdio":
+        click.echo(f"PageServe MCP [stdio] → {base_url}", err=True)
         server.run(transport="stdio")
-    elif transport == "sse":
-        server.run(transport="sse", port=port)
     else:
-        server.run(transport="streamable-http", port=port)
+        click.echo(
+            f"PageServe MCP [{transport}] listening on http://{host}:{port}  → {base_url}",
+            err=True,
+        )
+        server.run(transport=transport)
 
 
 @cli.command("list")
@@ -161,6 +166,50 @@ def query(ctx, doc_id, question, stream, as_json):
             click.echo(f"Nguồn: {result.citation}", err=True)
             if result.elapsed_ms:
                 click.echo(f"Thời gian: {result.elapsed_ms}ms", err=True)
+
+
+@cli.command()
+@click.argument("doc_id")
+@click.argument("question")
+@click.option(
+    "--docs",
+    default=None,
+    help="Retrieve nhiều doc cùng lúc (comma-separated). Bỏ qua nếu chỉ 1 doc_id.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output raw JSON")
+@click.pass_context
+def retrieve(ctx, doc_id, question, docs, as_json):
+    """Lấy nội dung gốc các section liên quan (KHÔNG synthesize answer).
+
+    Rẻ hơn query — chỉ 1 LLM call/doc để điều hướng tree.
+
+    \b
+    Examples:
+        pageserve retrieve uuid-xxx "thử việc quy định thế nào?"
+        pageserve retrieve _ "so sánh" --docs uuid-a,uuid-b
+    """
+    client = _make_client(ctx)
+    target: str | list[str] = (
+        [d.strip() for d in docs.split(",")] if docs else doc_id
+    )
+    result = client.retrieve(target, question)
+
+    if as_json:
+        click.echo(json.dumps(result.model_dump(), ensure_ascii=False, indent=2, default=str))
+        return
+
+    if not result.results:
+        click.echo("Không tìm thấy section liên quan.")
+        return
+
+    for r in result.results:
+        click.echo(f"\n📄 {r.doc_name or r.doc_id}")
+        for s in r.sections:
+            rng = f" (tr.{s.page_range})" if s.page_range else ""
+            click.echo(f"\n  ── {s.title}{rng} ──")
+            click.echo(s.text)
+    if result.elapsed_ms:
+        click.echo(f"\nThời gian: {result.elapsed_ms}ms", err=True)
 
 
 @cli.command()

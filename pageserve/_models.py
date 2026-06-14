@@ -119,6 +119,57 @@ class QueryResult(BaseModel):
         return self.citation
 
 
+class Section(BaseModel):
+    """Một section liên quan trả về từ POST /v1/retrieve."""
+
+    title: str
+    node_id: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
+    pages: list[Page] = Field(default_factory=list)
+
+    @property
+    def page_range(self) -> str:
+        if self.page_start is None:
+            return ""
+        if self.page_start == self.page_end or self.page_end is None:
+            return str(self.page_start)
+        return f"{self.page_start}–{self.page_end}"
+
+    @property
+    def text(self) -> str:
+        """Nội dung thô của toàn bộ section, nối các trang."""
+        return "\n\n".join(p.content for p in self.pages)
+
+
+class RetrieveDocResult(BaseModel):
+    """Kết quả retrieve cho một document."""
+
+    doc_id: str
+    doc_name: str | None = None
+    sections: list[Section] = Field(default_factory=list)
+
+
+class RetrieveResult(BaseModel):
+    """Phản hồi từ POST /v1/retrieve — nội dung gốc, KHÔNG synthesize answer."""
+
+    doc_ids: list[str] = Field(default_factory=list)
+    question: str | None = None
+    results: list[RetrieveDocResult] = Field(default_factory=list)
+    elapsed_ms: int | None = None
+    cached: bool = False
+
+    @property
+    def sections(self) -> list[Section]:
+        """Phẳng hóa tất cả sections từ mọi document."""
+        return [s for r in self.results for s in r.sections]
+
+    @property
+    def text(self) -> str:
+        """Toàn bộ nội dung retrieve nối lại — tiện làm context cho LLM."""
+        return "\n\n".join(s.text for s in self.sections)
+
+
 class SSEEvent(BaseModel):
     type: str
 

@@ -20,6 +20,7 @@ from pageserve._models import (
     IndexProgress,
     Page,
     QueryResult,
+    RetrieveResult,
     SSEEvent,
     Stats,
     StructureNode,
@@ -397,6 +398,34 @@ class PageServeClient:
                 results[idx] = future.result()
 
         return results  # type: ignore[return-value]
+
+    def retrieve(
+        self,
+        doc_id_or_ids: str | list[str],
+        question: str,
+    ) -> RetrieveResult:
+        """Retrieve the raw content of the sections relevant to a question.
+
+        Unlike ``query()``, this does NOT synthesize an answer — it returns the
+        original page content of the matching sections. It is cheaper (one LLM
+        call per document just to navigate the tree) and is ideal when you want
+        to feed the source material into your own LLM / prompt.
+
+        Args:
+            doc_id_or_ids: A single doc_id, or a list of doc_ids.
+            question:      Natural-language question used to locate sections.
+
+        Returns:
+            RetrieveResult with one entry per document, each containing the
+            relevant sections and their page-level content.
+        """
+        body: dict[str, Any] = {"question": question}
+        if isinstance(doc_id_or_ids, (list, tuple)):
+            body["doc_ids"] = list(doc_id_or_ids)
+        else:
+            body["doc_id"] = doc_id_or_ids
+        data = self._post("/v1/retrieve", body, timeout=_QUERY_TIMEOUT)
+        return RetrieveResult(**data)
 
     def query_stream(
         self,

@@ -110,6 +110,42 @@ def test_query_many_parallel(client, mock_query_response):
 
 
 @respx.mock
+def test_retrieve_single_doc(client, mock_retrieve_response):
+    route = respx.post(f"{client._base}/v1/retrieve").mock(
+        return_value=httpx.Response(200, json=mock_retrieve_response)
+    )
+    result = client.retrieve("uuid-hop-dong", "điều khoản thử việc")
+
+    import json as _json
+
+    sent = _json.loads(route.calls.last.request.read())
+    assert sent == {"question": "điều khoản thử việc", "doc_id": "uuid-hop-dong"}
+    assert result.doc_ids == ["uuid-hop-dong"]
+    assert result.cached is False
+    assert len(result.results) == 1
+    sec = result.results[0].sections[0]
+    assert sec.title == "Thử việc"
+    assert sec.page_range == "5–6"
+    assert len(sec.pages) == 2
+    # convenience accessors
+    assert len(result.sections) == 1
+    assert "Thời gian thử việc" in result.text
+
+
+@respx.mock
+def test_retrieve_multi_docs_sends_doc_ids(client, mock_retrieve_response):
+    route = respx.post(f"{client._base}/v1/retrieve").mock(
+        return_value=httpx.Response(200, json=mock_retrieve_response)
+    )
+    client.retrieve(["uuid-a", "uuid-b"], "so sánh")
+
+    import json as _json
+
+    body = _json.loads(route.calls.last.request.read())
+    assert body == {"question": "so sánh", "doc_ids": ["uuid-a", "uuid-b"]}
+
+
+@respx.mock
 def test_get_pages(client):
     respx.get(f"{client._base}/v1/documents/uuid-hop-dong/pages/5-6").mock(
         return_value=httpx.Response(

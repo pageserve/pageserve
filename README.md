@@ -27,6 +27,7 @@ One install gives you three ways to talk to your PageIndex deployment:
 ## Features
 
 - **Vector-free retrieval** — answers come with exact page references (`Employment Contract p.5, 6`), not opaque similarity scores.
+- **Query or retrieve** — `query()` synthesizes an answer; `retrieve()` returns the raw section content (cheaper, ideal for your own prompts).
 - **Sync & async** — `PageServeClient` and `AsyncPageServeClient`, including concurrent `query_many`.
 - **Streaming** — token-by-token responses over Server-Sent Events.
 - **Model Context Protocol** — expose your corpus to LLM agents with keys kept out of the model's context.
@@ -63,6 +64,10 @@ result = client.query(docs[0].doc_id, "What are the probation terms?")
 print(result.answer)
 print(result.citation)   # "Employment Contract p.5, 6"
 print(result.page_refs)  # [5, 6]
+
+# Or retrieve the raw source sections without synthesizing an answer (cheaper)
+retrieved = client.retrieve(docs[0].doc_id, "What are the probation terms?")
+print(retrieved.text)    # all relevant section text, ready to drop into a prompt
 
 # Upload and wait for indexing to complete
 upload = client.upload("./contract.pdf", wait=True)
@@ -129,15 +134,17 @@ Run the MCP server so Claude Desktop, Cursor, or any MCP-compatible agent can qu
 }
 ```
 
-The server exposes five tools:
+The server exposes seven tools:
 
 | Tool | Description |
 | --- | --- |
 | `list_documents` | See what documents are available |
 | `query_document` | Ask a question against one document |
 | `query_multiple_documents` | Cross-reference multiple documents |
+| `retrieve_document` | Return raw section content without synthesizing an answer |
 | `get_page_content` | Read raw page text (no LLM, instant) |
 | `get_document_structure` | Browse the table of contents |
+| `get_service_health` | Check service status and queue |
 
 > Keys live in environment variables and never appear in tool arguments or the model's context window.
 
@@ -151,6 +158,7 @@ export PAGESERVE_SECRET_KEY=<your-secret-key>
 pageserve list                                      # list documents
 pageserve query <doc_id> "question"                 # ask a question
 pageserve query <doc_id> "question" --stream        # streaming output
+pageserve retrieve <doc_id> "question"              # raw sections, no answer
 pageserve upload ./report.pdf --watch               # upload + progress bar
 pageserve health                                    # service status
 pageserve keys list                                 # list API keys

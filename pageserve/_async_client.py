@@ -20,6 +20,7 @@ from pageserve._models import (
     IndexProgress,
     Page,
     QueryResult,
+    RetrieveResult,
     SSEEvent,
     Stats,
     StructureNode,
@@ -246,6 +247,23 @@ class AsyncPageServeClient:
     async def query_many(self, queries: list[tuple[str, str]]) -> list[QueryResult]:
         tasks = [self.query(doc_id, question) for doc_id, question in queries]
         return list(await asyncio.gather(*tasks))
+
+    async def retrieve(
+        self,
+        doc_id_or_ids: str | list[str],
+        question: str,
+    ) -> RetrieveResult:
+        """Retrieve raw section content for a question (no answer synthesis).
+
+        See PageServeClient.retrieve for details.
+        """
+        body: dict[str, Any] = {"question": question}
+        if isinstance(doc_id_or_ids, (list, tuple)):
+            body["doc_ids"] = list(doc_id_or_ids)
+        else:
+            body["doc_id"] = doc_id_or_ids
+        data = await self._post("/v1/retrieve", body, timeout=_QUERY_TIMEOUT)
+        return RetrieveResult(**data)
 
     async def query_stream(
         self,

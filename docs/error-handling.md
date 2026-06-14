@@ -1,6 +1,6 @@
 # Error Handling
 
-All exceptions live in `pageserve.exceptions` and are also importable directly from `pageserve`.
+Every exception is importable directly from the top-level `pageserve` package. All of them derive from `PageServeError`, so a single `except PageServeError` is a safe catch-all.
 
 ```python
 from pageserve import (
@@ -163,3 +163,7 @@ try:
 except RateLimitError as e:
     print(f"Retry after {e.retry_after} seconds")
 ```
+
+---
+
+**See also:** [Data Models](models.md) · [Sync Client Reference](sync-client.md) · [Back to docs index](../README.md#documentation)

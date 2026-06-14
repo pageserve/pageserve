@@ -110,9 +110,14 @@ See the [Sync Client Reference](sync-client.md) for parameter details.
 | `client.upload(path)` | `await client.upload(path)` |
 | `client.query(id, q)` | `await client.query(id, q)` |
 | `client.query_docs(ids, q)` | `await client.query_docs(ids, q)` |
+| `client.retrieve(id_or_ids, q)` | `await client.retrieve(id_or_ids, q)` |
 | `client.query_many(pairs)` | `await client.query_many(pairs)` |
 | `for e in client.query_stream(...)` | `async for e in client.query_stream(...)` |
 | `for p in client.watch_progress(id)` | `async for p in client.watch_progress(id)` |
+
+---
+
+**See also:** [Sync Client Reference](sync-client.md) · [Streaming](streaming.md) · [Back to docs index](../README.md#documentation)
 | `client.get_structure(id)` | `await client.get_structure(id)` |
 | `client.get_pages(id, pages)` | `await client.get_pages(id, pages)` |
 | `client.health()` | `await client.health()` |

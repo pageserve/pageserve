@@ -191,6 +191,39 @@ for event in client.query_stream("uuid-xxx", "question"):
         break
 ```
 
+## Retrieve
+
+### `retrieve(doc_id_or_ids, question)`
+
+Retrieve the **raw content** of the sections relevant to a question, without synthesizing an answer. Cheaper than `query()` (one LLM call per document just to navigate the tree) and ideal when you want to feed the source material into your own prompt.
+
+Accepts either a single `doc_id` (string) or a list of `doc_id`s.
+
+```python
+result = client.retrieve("uuid-xxx", "What are the probation terms?")
+
+print(result.elapsed_ms)   # 820
+print(result.cached)       # False
+
+for doc in result.results:
+    print(doc.doc_name or doc.doc_id)
+    for section in doc.sections:
+        print(f"  {section.title} (p.{section.page_range})")
+        print(section.text)     # all pages joined
+
+# Convenience accessors that flatten across documents:
+result.sections   # list[Section] from every document
+result.text       # all section text joined — drop straight into a prompt
+```
+
+Multiple documents:
+
+```python
+result = client.retrieve(["uuid-contract", "uuid-law"], "probation pay rules")
+```
+
+See [`RetrieveResult` / `Section`](models.md) for the full model.
+
 ## API Keys
 
 ```python
@@ -235,3 +268,7 @@ print(h.queue.pending)   # documents waiting to be indexed
 url = client.pdf_url("uuid-xxx")
 # https://pageindex.company.com/files/uuid-xxx.pdf
 ```
+
+---
+
+**See also:** [Async Client Reference](async-client.md) · [Data Models](models.md) · [Error Handling](error-handling.md) · [Back to docs index](../README.md#documentation)
